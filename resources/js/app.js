@@ -268,32 +268,59 @@ const initializeDropzones = () => {
 };
 
 const initializeVendorUi = async () => {
+    let DataTable = null;
+
     try {
-        const [{ default: DataTable }] = await Promise.all([
-            import('datatables.net-bs5'),
-            import('select2/dist/js/select2.full.js'),
-            import('daterangepicker'),
-            import('bootstrap-fileinput/js/fileinput.js'),
-            import('bootstrap-fileinput/themes/bs5/theme.js'),
-        ]);
-
+        const dataTableModule = await import('datatables.net-bs5');
+        DataTable = dataTableModule.default;
         window.DataTable = DataTable;
-        window.appPlugins = {
-            $,
-            bootstrap,
-            moment,
-            DataTable,
-            Dropzone,
-        };
+    } catch (error) {
+        console.error('Failed to load DataTables.', error);
+    }
 
+    try {
+        await import('select2/dist/js/select2.full.js');
         initializeSelect2();
-        initializeDataTables(DataTable);
+    } catch (error) {
+        console.error('Failed to initialize Select2.', error);
+    }
+
+    try {
+        if (DataTable) {
+            initializeDataTables(DataTable);
+        }
+    } catch (error) {
+        console.error('Failed to initialize DataTables.', error);
+    }
+
+    try {
+        await import('daterangepicker');
         initializeDateRangePickers();
+    } catch (error) {
+        console.error('Failed to initialize daterangepicker.', error);
+    }
+
+    try {
+        await import('bootstrap-fileinput/js/fileinput.js');
+        await import('bootstrap-fileinput/themes/bs5/theme.js');
         initializeFileInputs();
+    } catch (error) {
+        console.error('Failed to initialize bootstrap-fileinput.', error);
+    }
+
+    try {
         initializeDropzones();
     } catch (error) {
-        console.error('Failed to initialize vendor UI plugins.', error);
+        console.error('Failed to initialize Dropzone.', error);
     }
+
+    window.appPlugins = {
+        $,
+        bootstrap,
+        moment,
+        DataTable,
+        Dropzone,
+    };
 };
 
 window.initializeVendorUi = initializeVendorUi;

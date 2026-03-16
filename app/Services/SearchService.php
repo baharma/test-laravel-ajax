@@ -2,8 +2,8 @@
 
 namespace App\Services;
 
-use Illuminate\Http\Request;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Schema;
 
 class SearchService
@@ -24,6 +24,8 @@ class SearchService
 
     protected Builder $query;
     protected Request $request;
+    protected array $tableColumns = [];
+    protected array $searchableColumns = [];
 
     /**
      * Menerapkan semua logika search, filter, sort, dan paginasi ke query.
@@ -31,14 +33,23 @@ class SearchService
      * @param Builder $query Query Eloquent yang akan dimodifikasi.
      * @param Request $request Request HTTP saat ini.
      * @param array $defaultRelations Relasi default dari controller.
+     * @param array $searchableColumns Kolom yang diizinkan untuk pencarian keyword.
      * @return \Illuminate\Contracts\Pagination\LengthAwarePaginator|\Illuminate\Database\Eloquent\Collection
      */
-    public function handleSearch(Builder $query, Request $request, array $defaultRelations = [])
+    public function handleSearch(
+        Builder $query,
+        Request $request,
+        array $defaultRelations = [],
+        array $searchableColumns = [],
+    )
     {
         $this->query = $query;
         $this->request = $request;
+        $this->tableColumns = Schema::getColumnListing($this->query->getModel()->getTable());
+        $this->searchableColumns = $this->resolveSearchableColumns($searchableColumns);
 
         $this->applyRelations($defaultRelations);
+        $this->applySearch();
         $this->applyFilters();
         $this->applySorting();
 
@@ -68,10 +79,30 @@ class SearchService
         }
     }
 
+    protected function applySearch(): void
+    {
+        $keyword = trim((string) $this->request->get('search', ''));
+
+        if ($keyword === '' || empty($this->searchableColumns)) {
+            return;
+        }
+
+        $this->query->where(function (Builder $builder) use ($keyword) {
+            foreach ($this->searchableColumns as $index => $column) {
+                $method = $index === 0 ? 'where' : 'orWhere';
+                $builder->{$method}($column, 'like', "%{$keyword}%");
+            }
+        });
+    }
+
     protected function applySorting()
     {
         $orderBy = $this->request->get('orderBy', 'id');
         $orderDirection = $this->request->get('orderDirection', 'desc');
+
+        if (!in_array($orderBy, $this->tableColumns, true)) {
+            $orderBy = 'id';
+        }
 
         if (!in_array(strtolower($orderDirection), ['asc', 'desc'])) {
             $orderDirection = 'desc';
@@ -91,15 +122,12 @@ class SearchService
             return;
         }
 
-
-        $tableColumns = Schema::getColumnListing($this->query->getModel()->getTable());
-
         foreach ($filters as $field => $value) {
-            if (in_array($field, $tableColumns) && $value !== null && $value !== '') {
+            if (in_array($field, $this->tableColumns, true) && $value !== null && $value !== '') {
                 if (is_array($value)) {
                     $this->query->whereIn($field, $value);
                 } else {
-                    $this->query->where($field, $value);
+                    $this->query->where($field, $this->normalizeFilterValue($value));
                 }
             }
         }
@@ -113,9 +141,35 @@ class SearchService
     protected function getResults()
     {
         $perPage = $this->request->get('per_page', 15);
-        if ($perPage == '-1' || strtolower($perPage) == 'all') {
+
+        if ($perPage == '-1' || strtolower((string) $perPage) == 'all') {
             return $this->query->get();
         }
-        return $this->query->paginate((int)$perPage);
+
+        return $this->query->paginate((int) $perPage);
+    }
+
+    protected function resolveSearchableColumns(array $searchableColumns): array
+    {
+        $columns = empty($searchableColumns) ? $this->tableColumns : $searchableColumns;
+
+        return array_values(array_intersect($columns, $this->tableColumns));
+    }
+
+    protected function normalizeFilterValue(mixed $value): mixed
+    {
+        if (is_string($value)) {
+            $normalized = strtolower(trim($value));
+
+            if ($normalized === 'true') {
+                return true;
+            }
+
+            if ($normalized === 'false') {
+                return false;
+            }
+        }
+
+        return $value;
     }
 }

@@ -23,6 +23,11 @@
                             :ajax-url="route('lookups.employment-statuses')" minimum-input-length="0" allow-clear="true" />
                     </div>
 
+                    <div class="col-md-6 col-lg-4">
+                        <x-date-picker name="hire_date" label="Tanggal Masuk" placeholder="Pilih rentang tanggal masuk"
+                            hint="Filter memakai range `hire_date` dari daterangepicker." />
+                    </div>
+
                     <div class="col-md-4 col-lg-3">
                         <x-select name="is_active" label="Aktif" placeholder="Semua" :options="[['id' => '1', 'text' => 'Aktif'], ['id' => '0', 'text' => 'Nonaktif']]"
                             allow-clear="true" />
@@ -295,6 +300,12 @@
                 });
             });
 
+            form.querySelectorAll('[data-control="daterangepicker"]').forEach((element) => {
+                element.addEventListener('change', () => {
+                    void loadEmployees();
+                });
+            });
+
             resetButton?.addEventListener('click', () => {
                 form.reset();
 
@@ -303,6 +314,19 @@
                         $(element).val(null).trigger('change');
                     });
                 }
+
+                form.querySelectorAll('[data-control="daterangepicker"]').forEach((element) => {
+                    if ($) {
+                        const picker = $(element).data('daterangepicker');
+
+                        if (picker && moment) {
+                            picker.setStartDate(moment());
+                            picker.setEndDate(moment());
+                        }
+                    }
+
+                    element.value = '';
+                });
 
                 void loadEmployees();
             });

@@ -4,6 +4,7 @@ namespace App\Services;
 
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Schema;
 
 class SearchService
@@ -126,6 +127,8 @@ class SearchService
             if (in_array($field, $this->tableColumns, true) && $value !== null && $value !== '') {
                 if (is_array($value)) {
                     $this->query->whereIn($field, $value);
+                } elseif ($dateRange = $this->parseDateRange($value)) {
+                    $this->query->whereBetween($field, $dateRange);
                 } else {
                     $this->query->where($field, $this->normalizeFilterValue($value));
                 }
@@ -171,5 +174,36 @@ class SearchService
         }
 
         return $value;
+    }
+
+    protected function parseDateRange(mixed $value): ?array
+    {
+        if (! is_string($value)) {
+            return null;
+        }
+
+        $normalizedValue = trim($value);
+
+        if (! preg_match('/^\d{4}-\d{2}-\d{2}\s-\s\d{4}-\d{2}-\d{2}$/', $normalizedValue)) {
+            return null;
+        }
+
+        [$startDate, $endDate] = array_map('trim', explode(' - ', $normalizedValue, 2));
+
+        try {
+            $start = Carbon::createFromFormat('Y-m-d', $startDate)->startOfDay();
+            $end = Carbon::createFromFormat('Y-m-d', $endDate)->endOfDay();
+        } catch (\Throwable) {
+            return null;
+        }
+
+        if ($start->gt($end)) {
+            [$start, $end] = [$end->copy()->startOfDay(), $start->copy()->endOfDay()];
+        }
+
+        return [
+            $start->toDateString(),
+            $end->toDateString(),
+        ];
     }
 }

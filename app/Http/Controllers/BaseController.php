@@ -4,7 +4,10 @@ namespace App\Http\Controllers;
 
 use App\Services\SearchService;
 use App\Traits\ApiResponse;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
+use Illuminate\Support\Arr;
+use Illuminate\Support\Facades\DB;
 
 class BaseController extends Controller
 {
@@ -51,17 +54,100 @@ class BaseController extends Controller
         return $this->apiSuccess($results, 'Data retrieved successfully');
     }
 
-    protected function requestRelations()
+    public function show(Request $request, int|string $id)
     {
-        $relations = request()->get('relations');
+        $record = $this->findRecord($id);
+        $record->load($this->resolveRelations($request));
 
-        if ($relations) {
-            $this->relations = explode(',', $relations);
+        if ($this->usesResourceClass()) {
+            return new $this->resourceClass($record);
         }
+
+        return $this->apiSuccess($record, 'Data retrieved successfully');
+    }
+
+    public function store(Request $request)
+    {
+        $record = DB::transaction(function () use ($request) {
+            $record = new $this->model();
+            $record->fill($this->resolvePayload($request, $record));
+            $record->save();
+
+            return $record->fresh();
+        });
+
+        $record->load($this->resolveRelations($request));
+
+        if ($this->usesResourceClass()) {
+            return new $this->resourceClass($record);
+        }
+
+        return $this->apiSuccess($record, 'Data created successfully');
+    }
+
+    public function update(Request $request, int|string $id)
+    {
+        $record = DB::transaction(function () use ($request, $id) {
+            $record = $this->findRecord($id);
+            $record->fill($this->resolvePayload($request, $record));
+            $record->save();
+
+            return $record->fresh();
+        });
+
+        $record->load($this->resolveRelations($request));
+
+        if ($this->usesResourceClass()) {
+            return new $this->resourceClass($record);
+        }
+
+        return $this->apiSuccess($record, 'Data updated successfully');
+    }
+
+    public function destroy(int|string $id)
+    {
+        DB::transaction(function () use ($id) {
+            $record = $this->findRecord($id);
+            $record->delete();
+        });
+
+        return $this->apiSuccess([], 'Data deleted successfully');
     }
 
     protected function usesResourceClass(): bool
     {
         return filled($this->resourceClass);
+    }
+
+    protected function resolveRelations(Request $request): array
+    {
+        $requestedRelations = $request->get('relations');
+
+        if (!filled($requestedRelations)) {
+            return $this->relations;
+        }
+
+        return array_values(array_unique([
+            ...$this->relations,
+            ...array_filter(explode(',', $requestedRelations)),
+        ]));
+    }
+
+    protected function findRecord(int|string $id): Model
+    {
+        return $this->model::query()->findOrFail($id);
+    }
+
+    protected function resolvePayload(Request $request, ?Model $record = null): array
+    {
+        $record ??= new $this->model();
+        $fillable = $record->getFillable();
+        $payload = $request->except(['_token', '_method', 'relations']);
+
+        if (empty($fillable)) {
+            return $payload;
+        }
+
+        return Arr::only($payload, $fillable);
     }
 }

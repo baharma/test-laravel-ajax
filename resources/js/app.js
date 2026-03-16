@@ -93,30 +93,6 @@ const getNestedValue = (object, path, fallback = undefined) => {
     }, object) ?? fallback;
 };
 
-const normalizeSelect2Items = (response, valueField, textField, resultsKey) => {
-    let items = [];
-
-    if (Array.isArray(response)) {
-        items = response;
-    } else if (resultsKey) {
-        items = getNestedValue(response, resultsKey, []);
-    } else {
-        items = response?.results ?? response?.data ?? response?.items ?? [];
-    }
-
-    return (Array.isArray(items) ? items : []).map((item) => {
-        if (item && item.id !== undefined && item.text !== undefined) {
-            return item;
-        }
-
-        return {
-            ...item,
-            id: item?.[valueField] ?? item?.id ?? item?.value,
-            text: item?.[textField] ?? item?.text ?? item?.name ?? item?.label ?? '',
-        };
-    });
-};
-
 const defaultDateRanges = {
     Today: [moment(), moment()],
     Yesterday: [moment().subtract(1, 'days'), moment().subtract(1, 'days')],
@@ -127,87 +103,6 @@ const defaultDateRanges = {
         moment().subtract(1, 'month').startOf('month'),
         moment().subtract(1, 'month').endOf('month'),
     ],
-};
-
-const initializeSelect2 = () => {
-    $('[data-control="select2"]').each(function initializeElement() {
-        const $element = $(this);
-
-        if ($element.data('select2')) {
-            return;
-        }
-
-        const dropdownParent = $element.closest('.modal').length
-            ? $element.closest('.modal')
-            : $(document.body);
-
-        const ajaxUrl = $element.data('ajaxUrl');
-        const valueField = $element.data('valueField') ?? 'id';
-        const textField = $element.data('textField') ?? 'text';
-        const resultsKey = $element.data('resultsKey') ?? null;
-        const queryParam = $element.data('queryParam') ?? 'q';
-        const pageParam = $element.data('pageParam') ?? 'page';
-        const ajaxMethod = ($element.data('ajaxMethod') ?? 'GET').toUpperCase();
-        const ajaxDelay = readNumber($element.data('ajaxDelay'), 250);
-        const minimumInputLength = readNumber($element.data('minimumInputLength'), 0);
-        const allowClear = readBoolean($element.data('allowClear'), true);
-        const baseAjaxParams = readJson($element.attr('data-ajax-params'), {});
-
-        const config = {
-            width: $element.data('width') ?? '100%',
-            dropdownParent,
-            placeholder: $element.data('placeholder') ?? $element.attr('placeholder') ?? '',
-            tags: readBoolean($element.data('tags'), false),
-            minimumResultsForSearch: readBoolean($element.data('search'), true) ? 0 : Infinity,
-            minimumInputLength,
-            allowClear,
-        };
-
-        if (ajaxUrl) {
-            config.ajax = {
-                url: ajaxUrl,
-                type: ajaxMethod,
-                delay: ajaxDelay,
-                cache: true,
-                data: (params) => ({
-                    ...baseAjaxParams,
-                    [queryParam]: params.term ?? '',
-                    [pageParam]: params.page ?? 1,
-                }),
-                processResults: (response, params) => {
-                    const currentPage = params.page ?? 1;
-                    const results = normalizeSelect2Items(
-                        response,
-                        valueField,
-                        textField,
-                        resultsKey,
-                    );
-
-                    const explicitMore = getNestedValue(response, 'pagination.more');
-                    const hasPaginatorMeta =
-                        getNestedValue(response, 'meta.current_page') !== undefined &&
-                        getNestedValue(response, 'meta.last_page') !== undefined;
-
-                    const more = explicitMore !== undefined
-                        ? explicitMore
-                        : hasPaginatorMeta
-                            ? getNestedValue(response, 'meta.current_page') <
-                              getNestedValue(response, 'meta.last_page')
-                            : getNestedValue(response, 'next_page_url') !== null &&
-                              getNestedValue(response, 'next_page_url') !== undefined;
-
-                    return {
-                        results,
-                        pagination: {
-                            more: Boolean(more),
-                        },
-                    };
-                },
-            };
-        }
-
-        $element.select2(config);
-    });
 };
 
 const initializeDataTables = (DataTable) => {
@@ -503,7 +398,6 @@ const initializeVendorUi = async () => {
 
     try {
         await import('select2/dist/js/select2.full.js');
-        initializeSelect2();
     } catch (error) {
         console.error('Failed to initialize Select2.', error);
     }

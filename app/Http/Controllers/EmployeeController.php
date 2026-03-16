@@ -2,12 +2,10 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Department;
 use App\Models\Employee;
-use App\Models\EmploymentStatus;
-use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 
 class EmployeeController extends BaseController
 {
@@ -20,62 +18,81 @@ class EmployeeController extends BaseController
         );
     }
 
-    public function departmentsLookup(Request $request): JsonResponse
+    public function store(Request $request)
     {
-        return $this->lookupResponse(
-            query: Department::query(),
-            request: $request,
-            searchColumns: ['name', 'code'],
-            formatter: fn (Department $department) => [
-                'id' => $department->id,
-                'text' => trim("{$department->code} - {$department->name}", ' -'),
-            ],
+        $payload = $this->validateEmployee($request);
+
+        $employee = DB::transaction(function () use ($payload) {
+            return Employee::query()->create($payload);
+        });
+
+        return $this->apiSuccess(
+            $employee->load($this->relations),
+            'Employee created successfully',
         );
     }
 
-    public function employmentStatusesLookup(Request $request): JsonResponse
+    public function update(Request $request, int|string $id)
     {
-        return $this->lookupResponse(
-            query: EmploymentStatus::query(),
-            request: $request,
-            searchColumns: ['name', 'code'],
-            formatter: fn (EmploymentStatus $status) => [
-                'id' => $status->id,
-                'text' => trim("{$status->code} - {$status->name}", ' -'),
-            ],
+        $employee = $this->findRecord($id);
+        $payload = $this->validateEmployee($request, $employee);
+
+        $employee = DB::transaction(function () use ($employee, $payload) {
+            $employee->fill($payload);
+            $employee->save();
+
+            return $employee->fresh();
+        });
+
+        return $this->apiSuccess(
+            $employee->load($this->relations),
+            'Employee updated successfully',
         );
     }
 
-    protected function lookupResponse(
-        Builder $query,
-        Request $request,
-        array $searchColumns,
-        callable $formatter,
-    ): JsonResponse {
-        try {
-            $keyword = trim((string) $request->input('q', ''));
+    protected function validateEmployee(Request $request, ?Employee $employee = null): array
+    {
+        $employeeId = $employee?->id;
 
-            $results = $query
-                ->when($keyword !== '', function ($builder) use ($keyword, $searchColumns) {
-                    $builder->where(function ($nestedQuery) use ($keyword, $searchColumns) {
-                        foreach ($searchColumns as $index => $column) {
-                            $method = $index === 0 ? 'where' : 'orWhere';
-                            $nestedQuery->{$method}($column, 'like', "%{$keyword}%");
-                        }
-                    });
-                })
-                ->orderBy('name')
-                ->limit(20)
-                ->get()
-                ->map($formatter);
+        return $request->validate([
+            'employee_code' => [
+                'required',
+                'string',
+                'max:50',
+                Rule::unique('employees', 'employee_code')->ignore($employeeId),
+            ],
+            'full_name' => ['required', 'string', 'max:255'],
+            'email' => [
+                'nullable',
+                'email',
+                'max:255',
+                Rule::unique('employees', 'email')->ignore($employeeId),
+            ],
+            'phone' => ['nullable', 'string', 'max:50'],
+            'gender' => ['nullable', Rule::in(['male', 'female'])],
+            'birth_place' => ['nullable', 'string', 'max:255'],
+            'birth_date' => ['nullable', 'date'],
+            'address' => ['nullable', 'string'],
+            'department_id' => ['required', 'integer', 'exists:departments,id'],
+            'position_id' => [
+                'required',
+                'integer',
+                Rule::exists('positions', 'id')->where(function ($query) use ($request) {
+                    $departmentId = $request->input('department_id');
 
-            return response()->json([
-                'results' => $results,
-            ]);
-        } catch (\Throwable) {
-            return response()->json([
-                'results' => [],
-            ]);
-        }
+                    if (filled($departmentId)) {
+                        $query->where('department_id', $departmentId);
+                    }
+
+                    return $query;
+                }),
+            ],
+            'employment_status_id' => ['required', 'integer', 'exists:employment_statuses,id'],
+            'hire_date' => ['required', 'date'],
+            'end_date' => ['nullable', 'date', 'after_or_equal:hire_date'],
+            'photo' => ['nullable', 'string', 'max:2048'],
+            'notes' => ['nullable', 'string'],
+            'is_active' => ['required', 'boolean'],
+        ]);
     }
 }

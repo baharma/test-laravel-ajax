@@ -43,6 +43,7 @@
 
                     <div class="col-md-6 col-lg-4">
                         <x-date-picker name="hire_date" label="Tanggal Masuk" placeholder="Pilih rentang tanggal masuk"
+                            :auto-update-input="false"
                             hint="Filter memakai range `hire_date` dari daterangepicker." />
                     </div>
 
@@ -811,6 +812,12 @@
             createButton?.addEventListener('click', openCreateModal);
             employeeSubmitButton.addEventListener('click', () => {
                 void submitEmployeeForm();
+            });
+
+            employeeModalElement?.addEventListener('shown.bs.modal', () => {
+                if (typeof window.initializeDropzones === 'function') {
+                    window.initializeDropzones();
+                }
             });
 
             employeeModalElement?.addEventListener('hidden.bs.modal', () => {

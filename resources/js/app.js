@@ -199,11 +199,8 @@ const initializeDateRangePickers = () => {
 
         $element.daterangepicker(pickerConfig);
 
-        const updateValue = (picker) => {
-            if (!autoUpdateInput) {
-                return;
-            }
-
+        // applyUpdate: selalu dipanggil saat user klik Apply (terlepas dari autoUpdateInput)
+        const applyUpdate = (picker) => {
             const nextValue = singleDatePicker
                 ? picker.startDate.format(displayFormat)
                 : `${picker.startDate.format(displayFormat)}${separator}${picker.endDate.format(displayFormat)}`;
@@ -211,8 +208,17 @@ const initializeDateRangePickers = () => {
             $element.val(nextValue).trigger('change');
         };
 
+        // autoUpdate: hanya dipanggil secara otomatis jika autoUpdateInput=true
+        const autoUpdate = (picker) => {
+            if (!autoUpdateInput) {
+                return;
+            }
+
+            applyUpdate(picker);
+        };
+
         $element.on('apply.daterangepicker', (event, picker) => {
-            updateValue(picker);
+            applyUpdate(picker);
         });
 
         $element.on('cancel.daterangepicker', () => {
@@ -220,7 +226,7 @@ const initializeDateRangePickers = () => {
         });
 
         if (autoUpdateInput && initialValue === '' && startDate) {
-            updateValue($element.data('daterangepicker'));
+            autoUpdate($element.data('daterangepicker'));
         }
     });
 };
@@ -441,6 +447,7 @@ const initializeVendorUi = async () => {
 };
 
 window.initializeVendorUi = initializeVendorUi;
+window.initializeDropzones = initializeDropzones;
 
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => {

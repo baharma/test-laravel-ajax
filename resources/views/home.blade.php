@@ -181,6 +181,27 @@
                 </button>
             </x-slot:footer>
         </x-modal>
+
+        {{-- Modal konfirmasi hapus employee --}}
+        <div class="modal fade" id="delete-confirm-modal" tabindex="-1" aria-labelledby="delete-confirm-modal-label" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content">
+                    <div class="modal-header border-0 pb-0">
+                        <h5 class="modal-title text-danger" id="delete-confirm-modal-label">
+                            <i class="bi bi-exclamation-triangle-fill me-2"></i> Hapus Employee
+                        </h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <p class="mb-0">Hapus employee <strong data-role="delete-confirm-name"></strong>? Tindakan ini tidak bisa dibatalkan.</p>
+                    </div>
+                    <div class="modal-footer border-0 pt-0">
+                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Batal</button>
+                        <button type="button" class="btn btn-danger" data-role="delete-confirm-btn">Ya, Hapus</button>
+                    </div>
+                </div>
+            </div>
+        </div>
     </main>
 @endsection
 
@@ -766,9 +787,45 @@
             };
 
             const deleteEmployee = async (employeeId, employeeName) => {
-                const confirmed = window.confirm(
-                    `Hapus employee "${employeeName}"? Tindakan ini tidak bisa dibatalkan.`,
-                );
+                // Tampilkan modal konfirmasi Bootstrap (menggantikan window.confirm yang sering auto-dismiss)
+                const confirmModalElement = document.getElementById('delete-confirm-modal');
+                const confirmModal = confirmModalElement && bootstrap
+                    ? bootstrap.Modal.getOrCreateInstance(confirmModalElement)
+                    : null;
+
+                if (!confirmModal) {
+                    return;
+                }
+
+                // Isi nama employee di dalam modal
+                const nameEl = confirmModalElement.querySelector('[data-role="delete-confirm-name"]');
+                if (nameEl) nameEl.textContent = employeeName;
+
+                // Buka modal dan tunggu user klik tombol
+                confirmModal.show();
+
+                const confirmed = await new Promise((resolve) => {
+                    const confirmBtn = confirmModalElement.querySelector('[data-role="delete-confirm-btn"]');
+
+                    const onConfirm = () => {
+                        cleanup();
+                        resolve(true);
+                    };
+
+                    const onDismiss = () => {
+                        cleanup();
+                        resolve(false);
+                    };
+
+                    const cleanup = () => {
+                        confirmBtn?.removeEventListener('click', onConfirm);
+                        confirmModalElement.removeEventListener('hidden.bs.modal', onDismiss);
+                        confirmModal.hide();
+                    };
+
+                    confirmBtn?.addEventListener('click', onConfirm);
+                    confirmModalElement.addEventListener('hidden.bs.modal', onDismiss, { once: true });
+                });
 
                 if (!confirmed) {
                     return;
